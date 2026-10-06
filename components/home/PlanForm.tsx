@@ -12,26 +12,76 @@ const preferenceOptions = [
   "Brunch",
 ];
 
+type PlannerFormData = {
+  studio: string;
+  location: string;
+  startTime: string;
+  duration: number;
+  preferences: string[];
+  maxWalkMinutes: number;
+};
+
 export default function PlanForm() {
-  const [selectedPreferences, setSelectedPreferences] = useState<string[]>([]);
+  const [formData, setFormData] = useState<PlannerFormData>({
+    studio: "",
+    location: "",
+    startTime: "",
+    duration: 50,
+    preferences: [],
+    maxWalkMinutes: 15,
+  });
+
+  function updateField<K extends keyof PlannerFormData>(
+    field: K,
+    value: PlannerFormData[K]
+  ) {
+    setFormData((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
 
   function togglePreference(preference: string) {
-    setSelectedPreferences((current) =>
-      current.includes(preference)
-        ? current.filter((item) => item !== preference)
-        : [...current, preference]
-    );
+    setFormData((current) => {
+      const isSelected = current.preferences.includes(preference);
+
+      return {
+        ...current,
+        preferences: isSelected
+          ? current.preferences.filter((item) => item !== preference)
+          : [...current.preferences, preference],
+      };
+    });
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  event.preventDefault();
+
+  try {
+    const response = await fetch("/api/plan", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(formData),
+    });
+
+    const data = await response.json();
+
+    console.log(data);
+  } catch (error) {
+    console.error("Failed to create plan:", error);
   }
+}
 
   return (
     <section className={styles.section} id="planner">
       <div className={styles.heading}>
         <p className={styles.eyebrow}>Plan your outing</p>
         <h2>Tell us where class ends.</h2>
+
         <p>
           We&apos;ll use your class timing and preferences to find the best
           nearby post-workout spot.
@@ -42,38 +92,70 @@ export default function PlanForm() {
         <div className={styles.grid}>
           <label className={styles.field}>
             <span>Studio</span>
-            <input type="text" placeholder="e.g. Solidcore" />
+
+            <input
+              type="text"
+              placeholder="e.g. Solidcore"
+              value={formData.studio}
+              onChange={(event) =>
+                updateField("studio", event.target.value)
+              }
+            />
           </label>
 
           <label className={styles.field}>
             <span>Location</span>
-            <input type="text" placeholder="e.g. Santana Row, San Jose" />
+
+            <input
+              type="text"
+              placeholder="e.g. Santana Row, San Jose"
+              value={formData.location}
+              onChange={(event) =>
+                updateField("location", event.target.value)
+              }
+            />
           </label>
 
           <label className={styles.field}>
             <span>Class start</span>
-            <input type="time" />
+
+            <input
+              type="time"
+              value={formData.startTime}
+              onChange={(event) =>
+                updateField("startTime", event.target.value)
+              }
+            />
           </label>
 
           <label className={styles.field}>
             <span>Duration</span>
-            <select defaultValue="50">
-              <option value="30">30 minutes</option>
-              <option value="45">45 minutes</option>
-              <option value="50">50 minutes</option>
-              <option value="60">60 minutes</option>
-              <option value="75">75 minutes</option>
-              <option value="90">90 minutes</option>
+
+            <select
+              value={formData.duration}
+              onChange={(event) =>
+                updateField("duration", Number(event.target.value))
+              }
+            >
+              <option value={30}>30 minutes</option>
+              <option value={45}>45 minutes</option>
+              <option value={50}>50 minutes</option>
+              <option value={60}>60 minutes</option>
+              <option value={75}>75 minutes</option>
+              <option value={90}>90 minutes</option>
             </select>
           </label>
         </div>
 
         <div className={styles.preferenceGroup}>
-          <span className={styles.groupLabel}>After class I want...</span>
+          <span className={styles.groupLabel}>
+            After class I want...
+          </span>
 
           <div className={styles.chips}>
             {preferenceOptions.map((preference) => {
-              const isSelected = selectedPreferences.includes(preference);
+              const isSelected =
+                formData.preferences.includes(preference);
 
               return (
                 <button
@@ -94,12 +176,18 @@ export default function PlanForm() {
 
         <label className={styles.walkField}>
           <span>Maximum walking time</span>
-          <select defaultValue="15">
-            <option value="5">5 minutes</option>
-            <option value="10">10 minutes</option>
-            <option value="15">15 minutes</option>
-            <option value="20">20 minutes</option>
-            <option value="30">30 minutes</option>
+
+          <select
+            value={formData.maxWalkMinutes}
+            onChange={(event) =>
+              updateField("maxWalkMinutes", Number(event.target.value))
+            }
+          >
+            <option value={5}>5 minutes</option>
+            <option value={10}>10 minutes</option>
+            <option value={15}>15 minutes</option>
+            <option value={20}>20 minutes</option>
+            <option value={30}>30 minutes</option>
           </select>
         </label>
 
