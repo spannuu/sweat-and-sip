@@ -43,3 +43,5 @@ next-env.d.ts
 # Local coding assistant files
 AGENTS.md
 CLAUDE.md
+
+/lib/generated/prisma

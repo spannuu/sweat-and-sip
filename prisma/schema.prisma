@@ -1,0 +1,57 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum VenueCategory {
+  COFFEE
+  MATCHA
+  SMOOTHIE
+  JUICE
+  BAKERY
+  BRUNCH
+}
+
+model WorkoutClass {
+  id              String   @id @default(cuid())
+  studio          String
+  locationName    String
+  startsAt        DateTime
+  durationMinutes Int
+  createdAt       DateTime @default(now())
+
+  outing Outing?
+}
+
+model Outing {
+  id             String @id @default(cuid())
+  workoutClassId String @unique
+  maxWalkMinutes Int
+
+  venuePlaceId   String?
+  venueName      String?
+  venueAddress   String?
+  venueCategory  VenueCategory?
+  venueRating    Float?
+  walkingMinutes Int?
+
+  createdAt DateTime @default(now())
+
+  workoutClass WorkoutClass       @relation(fields: [workoutClassId], references: [id], onDelete: Cascade)
+  preferences  OutingPreference[]
+}
+
+model OutingPreference {
+  id       String        @id @default(cuid())
+  category VenueCategory
+
+  outingId String
+  outing   Outing @relation(fields: [outingId], references: [id], onDelete: Cascade)
+
+  @@unique([outingId, category])
+}
