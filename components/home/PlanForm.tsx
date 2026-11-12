@@ -31,6 +31,7 @@ type PlaceResult = {
   longitude?: number;
   preferenceScore: number;
   distanceScore: number;
+  walkingMinutes: number | null;
   totalScore: number;
   recommendationReason: string;
 };
@@ -89,12 +90,6 @@ export default function PlanForm() {
       };
     }
   );
-  }
-
-  function getWalkingMinutes(distanceMeters: number | null) {
-    if (distanceMeters === null) return null;
-
-    return Math.max(1, Math.round(distanceMeters / 80));
   }
 
   function getStartsAtIso(startTime: string) {
@@ -163,7 +158,7 @@ export default function PlanForm() {
           placeId: place.placeId,
           name: place.name,
           address: place.address,
-          walkingMinutes: getWalkingMinutes(place.distanceMeters),
+          walkingMinutes: place.walkingMinutes,
         },
       }),
     });
@@ -321,7 +316,7 @@ export default function PlanForm() {
 
     <div className={styles.resultCards}>
       {results.places.slice(0, 3).map((place, index) => {
-        const walkingMinutes = getWalkingMinutes(place.distanceMeters);
+        const walkingMinutes = place.walkingMinutes;
 
         return (
           <article className={styles.resultCard} key={place.placeId}>

@@ -18,6 +18,7 @@ type PlaceCandidate = {
   distanceMeters: number | null;
   latitude?: number;
   longitude?: number;
+  walkingMinutes?: number | null;
 };
 
 function calculateEndTime(startTime: string, duration: number) {
@@ -68,6 +69,71 @@ async function geocodeLocation(location: string) {
     longitude: result.lon,
   };
 }
+
+async function getWalkingTimes(
+  latitude: number,
+  longitude: number,
+  places: PlaceCandidate[]
+) {
+  const apiKey = process.env.GEOAPIFY_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Geoapify API key is not configured");
+  }
+
+  const validPlaces = places.filter(
+    (place) =>
+      place.latitude !== undefined &&
+      place.longitude !== undefined
+  );
+
+  if (validPlaces.length === 0) {
+    return new Map<string, number>();
+  }
+
+  const response = await fetch(
+    `https://api.geoapify.com/v1/routematrix?apiKey=${apiKey}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        mode: "walk",
+        sources: [
+          {
+            location: [longitude, latitude],
+          },
+        ],
+        targets: validPlaces.map((place) => ({
+          location: [place.longitude, place.latitude],
+        })),
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Geoapify route matrix request failed");
+  }
+
+  const data = await response.json();
+
+  const walkingTimes = new Map<string, number>();
+
+  validPlaces.forEach((place, index) => {
+    const route = data.sources_to_targets?.[0]?.[index];
+
+    if (route?.time !== null && route?.time !== undefined) {
+      walkingTimes.set(
+        place.placeId,
+        Math.max(1, Math.round(route.time / 60))
+      );
+    }
+  });
+
+  return walkingTimes;
+}
+
 
 function getCategoriesForPreferences(preferences: string[]) {
   const categoryMap: Record<string, string[]> = {
@@ -221,13 +287,13 @@ function getPreferenceScore(
   return score;
 }
 
-function getDistanceScore(distanceMeters: number | null) {
-  if (distanceMeters === null) return 0;
+function getWalkingScore(walkingMinutes: number | null) {
+  if (walkingMinutes === null) return 0;
 
-  if (distanceMeters <= 300) return 5;
-  if (distanceMeters <= 600) return 4;
-  if (distanceMeters <= 900) return 3;
-  if (distanceMeters <= 1200) return 2;
+  if (walkingMinutes <= 5) return 5;
+  if (walkingMinutes <= 10) return 4;
+  if (walkingMinutes <= 15) return 3;
+  if (walkingMinutes <= 20) return 2;
 
   return 1;
 }
@@ -235,7 +301,7 @@ function getDistanceScore(distanceMeters: number | null) {
 function getRecommendationReason(
   place: PlaceCandidate,
   preferences: string[],
-  distanceMeters: number | null
+  walkingMinutes: number | null
 ) {
   const matchedPreference = preferences.find((preference) => {
     const value = preference.toLowerCase();
@@ -244,11 +310,6 @@ function getRecommendationReason(
 
     return name.includes(value) || categories.includes(value);
   });
-
-  const walkingMinutes =
-    distanceMeters === null
-      ? null
-      : Math.max(1, Math.round(distanceMeters / 80));
 
   if (matchedPreference && walkingMinutes !== null) {
     return `Strong ${matchedPreference.toLowerCase()} match · about ${walkingMinutes} min away`;
@@ -321,34 +382,51 @@ async function findNearbyPlaces(
     })
   );
 
+  const walkingTimes = await getWalkingTimes(
+    latitude,
+    longitude,
+    places
+  );
+
   return places
     .filter((place) => place.name !== "Unnamed place")
+    .map((place) => ({
+      ...place,
+      walkingMinutes:
+        walkingTimes.get(place.placeId) ?? null,
+    }))
+    .filter(
+      (place) =>
+        place.walkingMinutes !== null &&
+        place.walkingMinutes !== undefined &&
+        place.walkingMinutes <= maxWalkMinutes
+    )
     .map((place) => {
-        const preferenceScore = getPreferenceScore(
+      const preferenceScore = getPreferenceScore(
         place,
         preferences
-        );
+      );
 
-        const distanceScore = getDistanceScore(
-        place.distanceMeters
-        );
+      const distanceScore = getWalkingScore(
+        place.walkingMinutes
+      );
 
-        const totalScore =
+      const totalScore =
         preferenceScore * 2 + distanceScore;
 
-        const recommendationReason = getRecommendationReason(
+      const recommendationReason = getRecommendationReason(
         place,
         preferences,
-        place.distanceMeters
-        );
+        place.walkingMinutes
+      );
 
-        return {
+      return {
         ...place,
         preferenceScore,
         distanceScore,
         totalScore,
-        recommendationReason
-        };
+        recommendationReason,
+      };
     })
     .sort((a, b) => b.totalScore - a.totalScore)
     .slice(0, 10);
@@ -377,9 +455,13 @@ export async function POST(request: Request) {
 
     const location = await geocodeLocation(result.data.location);
 
+    const studioLocation = await geocodeLocation(
+      `${result.data.studio}, ${result.data.location}`
+    );
+    
     const places = await findNearbyPlaces(
-      location.latitude,
-      location.longitude,
+      studioLocation.latitude,
+      studioLocation.longitude,
       result.data.maxWalkMinutes,
       result.data.preferences
     );
@@ -389,6 +471,7 @@ export async function POST(request: Request) {
         ...result.data,
         classEndTime,
         location,
+        studioLocation,
       },
       places,
     });
